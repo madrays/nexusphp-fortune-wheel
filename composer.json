@@ -1,0 +1,29 @@
+{
+    "name": "madrays/nexusphp-fortune-wheel",
+    "description": "NexusPHP幸运转盘插件 - Fortune Wheel Plugin for NexusPHP",
+    "type": "library",
+    "license": "GPL-2.0-only",
+    "authors": [
+        {
+            "name": "madrays",
+            "email": "madrays@example.com"
+        }
+    ],
+    "require": {
+        "php": ">=8.2"
+    },
+    "autoload": {
+        "psr-4": {
+            "NexusPlugin\\FortuneWheel\\": "src/"
+        }
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "NexusPlugin\\FortuneWheel\\FortuneWheelServiceProvider"
+            ]
+        }
+    },
+    "minimum-stability": "stable",
+    "prefer-stable": true
+}
