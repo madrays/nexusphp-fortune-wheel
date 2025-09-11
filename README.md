@@ -208,3 +208,23 @@ nexusphp-fortune-wheel/
 ## 支持
 
 如有问题或建议，请提交Issue或联系开发者 **madrays**。
+
+## ☕ 请作者喝杯奶茶
+如果这个项目对你有帮助，可以请作者喝杯奶茶，您的支持是我持续创作的动力 ❤️
+
+<div align="center">
+  <div style="display: inline-block; text-align: center; margin: 0 20px;">
+    <img src="https://pic2.ziyuan.wang/user/madrays/2025/03/wechat-qr_3b12b18852890.jpg" alt="微信赞赏码" width="200"/>
+    <p style="margin: 10px 0; font-size: 16px;">
+      <span style="background: #07c160; color: white; padding: 4px 12px; border-radius: 4px;">微信赞赏</span>
+    </p>
+    <p style="color: #666; font-size: 14px;">感谢支持💗</p>
+  </div>
+  <div style="display: inline-block; text-align: center; margin: 0 20px;">
+    <img src="https://pic2.ziyuan.wang/user/madrays/2025/03/alipay-qr_053c36d2fe096.jpg" alt="支付宝赞赏码" width="200"/>
+    <p style="margin: 10px 0; font-size: 16px;">
+      <span style="background: #1677ff; color: white; padding: 4px 12px; border-radius: 4px;">支付宝赞赏</span>
+    </p>
+    <p style="color: #666; font-size: 14px;">加大电力⚡️</p>
+  </div>
+</div>
