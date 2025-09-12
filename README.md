@@ -34,23 +34,72 @@
 mkdir -p packages
 
 # 将下载的插件解压到 packages 目录
-# 确保目录结构为：packages/nexusphp-fortune-wheel/
+# 确保目录结构为：packages/fortune-wheel-plugin/
 ```
 
 ### 2. 修改 Composer 配置
 
-在站点根目录的 `composer.json` 中添加：
+在站点根目录的 `composer.json` 中需要添加两个部分：
 
+#### 2.1 添加仓库配置
+在 `repositories` 部分添加：
 ```json
 {
     "repositories": {
         "fortune-wheel": {
             "type": "path",
-            "url": "./packages/nexusphp-fortune-wheel"
+            "url": "./packages/fortune-wheel-plugin"
+        }
+    }
+}
+```
+
+#### 2.2 添加自动加载配置
+在 `autoload.psr-4` 部分添加：
+```json
+{
+    "autoload": {
+        "psr-4": {
+            "NexusPlugin\\FortuneWheel\\": "packages/fortune-wheel-plugin/src/"
+        }
+    }
+}
+```
+
+#### 2.3 添加依赖配置
+在 `require` 或 `require-dev` 部分添加：
+```json
+{
+    "require-dev": {
+        "madrays/nexusphp-fortune-wheel": "dev-main"
+    }
+}
+```
+
+**重要说明**：
+- 插件必须放在 `packages/fortune-wheel-plugin/` 目录下
+- 文件夹名称 `fortune-wheel-plugin` 不能修改
+- 命名空间 `NexusPlugin\\FortuneWheel\\` 不能修改
+
+#### 2.4 完整配置示例
+你的 `composer.json` 应该包含以下部分：
+```json
+{
+    "autoload": {
+        "psr-4": {
+            "Nexus\\": "nexus/",
+            "App\\": "app/",
+            "NexusPlugin\\FortuneWheel\\": "packages/fortune-wheel-plugin/src/"
         }
     },
-    "require": {
+    "require-dev": {
         "madrays/nexusphp-fortune-wheel": "dev-main"
+    },
+    "repositories": {
+        "fortune-wheel": {
+            "type": "path",
+            "url": "./packages/fortune-wheel-plugin"
+        }
     }
 }
 ```
@@ -58,7 +107,10 @@ mkdir -p packages
 ### 3. 安装插件
 
 ```bash
-# 重新生成自动加载文件
+# 重新生成自动加载文件并清除缓存
+composer dump-autoload && php artisan config:clear && php artisan cache:clear
+
+# 重新加载自动加载
 composer dump-autoload
 
 # 安装插件
@@ -72,31 +124,40 @@ php artisan plugin install madrays/nexusphp-fortune-wheel
 
 ```bash
 # 创建幸运转盘表
-php artisan migrate --path=packages/nexusphp-fortune-wheel/database/migrations/2024_01_01_000001_create_fortune_wheel_tables.php --force
+php artisan migrate --path=packages/fortune-wheel-plugin/database/migrations/2024_01_01_000001_create_fortune_wheel_tables.php --force
 
 # 添加奖品字段
-php artisan migrate --path=packages/nexusphp-fortune-wheel/database/migrations/2024_01_01_000002_add_prize_fields.php --force
+php artisan migrate --path=packages/fortune-wheel-plugin/database/migrations/2024_01_01_000002_add_prize_fields.php --force
 
 # 移除未使用字段
-php artisan migrate --path=packages/nexusphp-fortune-wheel/database/migrations/2024_01_01_000003_remove_unused_fields.php --force
+php artisan migrate --path=packages/fortune-wheel-plugin/database/migrations/2024_01_01_000003_remove_unused_fields.php --force
 
 # 更新奖品类型注释
-php artisan migrate --path=packages/nexusphp-fortune-wheel/database/migrations/2024_07_29_100000_update_prize_type_comment.php --force
+php artisan migrate --path=packages/fortune-wheel-plugin/database/migrations/2024_07_29_100000_update_prize_type_comment.php --force
 
 # 添加奖品名称到记录表
-php artisan migrate --path=packages/nexusphp-fortune-wheel/database/migrations/2024_07_29_160000_add_prize_name_to_records_table.php --force
+php artisan migrate --path=packages/fortune-wheel-plugin/database/migrations/2024_07_29_160000_add_prize_name_to_records_table.php --force
 
 # 创建导航菜单表
-php artisan migrate --path=packages/nexusphp-fortune-wheel/database/migrations/2024_07_29_180000_create_navigations_table_v2.php --force
+php artisan migrate --path=packages/fortune-wheel-plugin/database/migrations/2024_07_29_180000_create_navigations_table_v2.php --force
 
 # 添加结果字段到记录表
-php artisan migrate --path=packages/nexusphp-fortune-wheel/database/migrations/2024_07_29_200000_add_result_fields_to_records_table.php --force
+php artisan migrate --path=packages/fortune-wheel-plugin/database/migrations/2024_07_29_200000_add_result_fields_to_records_table.php --force
 
 # 添加外部链接支持
-php artisan migrate --path=packages/nexusphp-fortune-wheel/database/migrations/2024_07_29_210000_add_is_external_to_navigations.php --force
+php artisan migrate --path=packages/fortune-wheel-plugin/database/migrations/2024_07_29_210000_add_is_external_to_navigations.php --force
 ```
 
-### 5. 清除缓存
+### 5. 复制公共文件
+
+如果安装后出现视图文件缺失错误，需要手动复制公共文件：
+
+```bash
+# 复制幸运转盘插件的公共文件到站点public目录
+cp -r packages/fortune-wheel-plugin/public/* public/
+```
+
+### 6. 清除缓存
 
 ```bash
 php artisan config:clear
@@ -157,7 +218,7 @@ composer dump-autoload
 ## 文件结构
 
 ```
-nexusphp-fortune-wheel/
+fortune-wheel-plugin/
 ├── src/                                  # 源代码目录
 │   ├── FortuneWheelServiceProvider.php   # 服务提供者
 │   └── FortuneWheelRepository.php        # 主要业务逻辑
@@ -168,6 +229,30 @@ nexusphp-fortune-wheel/
 │   └── lang/                           # 语言文件
 ├── public/                              # 公共文件
 └── README.md                            # 说明文档
+```
+
+## 故障排除
+
+### 视图文件缺失
+
+如果出现"视图文件不存在"或"模板文件缺失"错误：
+
+```bash
+# 手动复制公共文件
+cp -r packages/fortune-wheel-plugin/public/* public/
+
+# 确保文件权限正确
+chmod -R 755 public/fortune-wheel*
+```
+
+### 数据库问题
+
+```bash
+# 检查表是否存在
+SHOW TABLES LIKE 'fortune_wheel_%';
+
+# 检查抽奖记录
+SELECT * FROM fortune_wheel_records ORDER BY created_at DESC LIMIT 10;
 ```
 
 ## 更新日志
