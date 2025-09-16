@@ -106,6 +106,13 @@ class SettingsManager
                         ->minValue(0)
                         ->suffix('秒')
                         ->helperText('两次抽奖之间的最小间隔时间'),
+
+                    \Filament\Forms\Components\Select::make('fortune_wheel.min_user_class')
+                        ->label('最低用户等级要求')
+                        ->options(self::getUserClassOptions())
+                        ->default(\App\Models\User::CLASS_USER)
+                        ->preload()
+                        ->helperText('只有达到此等级及以上的用户才能参与抽奖'),
                 ])
                 ->columns(2),
 
@@ -493,5 +500,48 @@ class SettingsManager
             default:
                 return '请输入相应的奖品数值。';
         }
+    }
+
+    /**
+     * 获取用户等级选项
+     */
+    protected static function getUserClassOptions(): array
+    {
+        $options = [];
+        // 尝试使用 get_user_class_name 获取所有可能的等级
+        if (function_exists('get_user_class_name')) {
+            // 扫描正常范围，避免卡死
+            for ($i = 0; $i <= 20; $i++) {
+                $name = get_user_class_name($i, false, false, true);
+                if (!empty($name)) {
+                    $options[$i] = $name;
+                }
+            }
+        }
+        // 如果上述方法未获取到，尝试使用 App\Models\User::listAllClass()
+        if (empty($options) && method_exists(\App\Models\User::class, 'listAllClass')) {
+            $options = \App\Models\User::listAllClass();
+        }
+        // 最后回退到默认的 listClass 范围
+        if (empty($options)) {
+            $options = \App\Models\User::listClass(0, 20);
+        }
+        
+        // 添加额外的特殊等级选项
+        $extraOptions = [
+            'staffmem' => '管理组成员 (staffmem)',
+            'admin' => '站点管理员 (admin)',
+            'topten' => 'Top 10 访问者 (topten)',
+            'offers' => '候补区访问者 (offers)',
+            'requests' => '求种区访问者 (requests)',
+            'log' => '日志查看者 (log)',
+        ];
+        
+        // 合并额外选项
+        foreach ($extraOptions as $key => $value) {
+            $options[$key] = $value;
+        }
+        
+        return $options;
     }
 }

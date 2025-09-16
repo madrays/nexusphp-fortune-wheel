@@ -30,6 +30,14 @@ try {
         exit;
     }
     
+    // 检查用户等级权限
+    $minClass = get_setting('fortune_wheel.min_user_class', \App\Models\User::CLASS_USER);
+    if ($CURUSER['class'] < $minClass) {
+        stdmsg("权限不足", "您的用户等级不足以参与抽奖活动。");
+        stdfoot();
+        exit;
+    }
+    
     $costPerSpin = $settings['bonus_cost_per_spin'] ?? 1000;
     $freeSpinsLeft = max(0, ($settings['daily_free_spins'] ?? 0) - $userStats['today_count']);
     

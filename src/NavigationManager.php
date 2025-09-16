@@ -52,9 +52,37 @@ class NavigationManager
 
     public static function getPermissionOptions(): array
     {
-        return [
-            null => '所有人可见 (默认)',
-            'users' => '普通用户 (users)',
+        $options = [null => '所有人可见 (默认)'];
+        
+        // 尝试使用 get_user_class_name 获取所有可能的等级
+        if (function_exists('get_user_class_name')) {
+            // 扫描正常范围，避免卡死
+            for ($i = 0; $i <= 20; $i++) {
+                $name = get_user_class_name($i, false, false, true);
+                if (!empty($name)) {
+                    $options[$i] = $name;
+                }
+            }
+        }
+        
+        // 如果上述方法未获取到，尝试使用 App\Models\User::listAllClass()
+        if (count($options) <= 1 && method_exists(\App\Models\User::class, 'listAllClass')) {
+            $allClasses = \App\Models\User::listAllClass();
+            foreach ($allClasses as $classId => $className) {
+                $options[$classId] = $className;
+            }
+        }
+        
+        // 最后回退到默认的 listClass 范围
+        if (count($options) <= 1) {
+            $defaultClasses = \App\Models\User::listClass(0, 20);
+            foreach ($defaultClasses as $classId => $className) {
+                $options[$classId] = $className;
+            }
+        }
+        
+        // 添加额外的特殊等级选项
+        $extraOptions = [
             'staffmem' => '管理组成员 (staffmem)',
             'admin' => '站点管理员 (admin)',
             'topten' => 'Top 10 访问者 (topten)',
@@ -62,6 +90,13 @@ class NavigationManager
             'requests' => '求种区访问者 (requests)',
             'log' => '日志查看者 (log)',
         ];
+        
+        // 合并额外选项
+        foreach ($extraOptions as $key => $value) {
+            $options[$key] = $value;
+        }
+        
+        return $options;
     }
 
     public static function saveNavigations(array $navData): void
