@@ -267,7 +267,7 @@ $bonusUnit = get_setting('fortune_wheel.bonus_unit') ?: '魔力';
         border-radius: 8px;
         margin-bottom: 8px;
         cursor: pointer;
-        transition: all 0.2s ease;
+        transition: all 0.1s ease;
     display: flex;
         justify-content: space-between;
     align-items: center;
@@ -293,13 +293,13 @@ $bonusUnit = get_setting('fortune_wheel.bonus_unit') ?: '魔力';
         color: var(--primary-color);
 }
 
-    /* Subtle pulse on featured area when animating */
+    /* 更快的脉冲动画 */
     .featured-prize.pulsing {
-        animation: pulse 0.9s ease-in-out infinite;
+        animation: pulse 0.6s ease-in-out infinite;
     }
     @keyframes pulse {
         0% { box-shadow: 0 0 0 rgba(0, 140, 255, 0.0); transform: translateZ(0); }
-        50% { box-shadow: 0 12px 30px rgba(0, 140, 255, 0.25); transform: translateZ(0); }
+        50% { box-shadow: 0 8px 20px rgba(0, 140, 255, 0.3); transform: translateZ(0); }
         100% { box-shadow: 0 0 0 rgba(0, 140, 255, 0.0); transform: translateZ(0); }
     }
 
@@ -314,14 +314,14 @@ $bonusUnit = get_setting('fortune_wheel.bonus_unit') ?: '魔力';
         padding: 12px 28px; border-radius: 14px;
         font-size: 1.08em; font-weight: 800; letter-spacing: .2px;
         cursor: pointer;
-        transition: transform .15s ease, box-shadow .15s ease, background .25s ease;
+        transition: transform .1s ease, box-shadow .1s ease, background .15s ease;
         box-shadow: 0 12px 28px rgba(14,165,255,.35), inset 0 -2px 0 rgba(255,255,255,.25);
     }
     .spin-btn--primary:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 16px 32px rgba(14,165,255,.38); background: linear-gradient(90deg, #0794ef, #32c9ff); }
     .spin-btn--primary:active:not(:disabled) { transform: translateY(0); box-shadow: 0 10px 22px rgba(14,165,255,.30); }
 
     /* 连抽按钮组：轻量胶囊分段，区分但不喧宾 */
-    .spin-btn--seg { background: #fff; border: 1px solid rgba(0,0,0,0.08); color: #0f172a; padding: 9px 18px; font-size: .95em; font-weight: 700; border-radius: 999px; cursor: pointer; transition: background .2s ease, color .2s ease, box-shadow .15s ease; box-shadow: 0 2px 8px rgba(0,0,0,.05); }
+    .spin-btn--seg { background: #fff; border: 1px solid rgba(0,0,0,0.08); color: #0f172a; padding: 9px 18px; font-size: .95em; font-weight: 700; border-radius: 999px; cursor: pointer; transition: background .1s ease, color .1s ease, box-shadow .1s ease; box-shadow: 0 2px 8px rgba(0,0,0,.05); }
     .spin-btn--seg:hover { background: #f4f8ff; box-shadow: 0 4px 12px rgba(0,0,0,.08); }
     .spin-btn--seg:active { background: #eef4ff; box-shadow: 0 2px 8px rgba(0,0,0,.05); }
     .spin-btn--seg[data-count="10"] { color: #5367d8; }
@@ -475,14 +475,26 @@ $bonusUnit = get_setting('fortune_wheel.bonus_unit') ?: '魔力';
             </div>
             <div class="actions-container" style="margin-top:20px;">
                 <div class="stats-head" style="margin-bottom:10px;"><span class="dot"></span><span class="title">抽奖操作</span></div>
-                <div class="actions actions-primary">
-                    <button class="spin-btn--primary" data-count="1">立即抽奖</button>
-                </div>
-                <div class="actions actions-multi">
-                    <button class="spin-btn--seg" data-count="10">连抽10次</button>
-                    <button class="spin-btn--seg" data-count="20">连抽20次</button>
-                    <button class="spin-btn--seg" data-count="50">连抽50次</button>
-                </div>
+            <div class="actions actions-primary">
+                <button class="spin-btn--primary" data-count="1">
+                    <span class="btn-text">立即抽奖</span>
+                    <span class="btn-loading" style="display: none;">加载中...</span>
+                </button>
+            </div>
+            <div class="actions actions-multi">
+                <button class="spin-btn--seg" data-count="10">
+                    <span class="btn-text">连抽10次</span>
+                    <span class="btn-loading" style="display: none;">加载中...</span>
+                </button>
+                <button class="spin-btn--seg" data-count="20">
+                    <span class="btn-text">连抽20次</span>
+                    <span class="btn-loading" style="display: none;">加载中...</span>
+                </button>
+                <button class="spin-btn--seg" data-count="50">
+                    <span class="btn-text">连抽50次</span>
+                    <span class="btn-loading" style="display: none;">加载中...</span>
+                </button>
+            </div>
             </div>
         </div>
     </div>
@@ -564,6 +576,98 @@ document.addEventListener('DOMContentLoaded', function() {
     let isSpinning = false;
     let lastResults = [];
     let lastWinning = null; // 用于右侧卡片同步
+    let pageFullyLoaded = false; // 页面完全加载标志
+    let lastClickTime = 0; // 防止快速重复点击
+    let resultsFullyDisplayed = true; // 抽奖结果是否完全显示
+    let currentAnimation = null; // 当前动画的取消函数
+
+    // 页面完全加载检查
+    function checkPageFullyLoaded() {
+        // 检查所有关键元素是否已加载
+        const criticalElements = [
+            prizesList,
+            featuredPrize,
+            spinButtons.length > 0,
+            prizeItems.length > 0
+        ];
+        
+        const allLoaded = criticalElements.every(element => element !== null && element !== false);
+        
+        // 额外检查：确保DOM完全稳定
+        const isDOMStable = document.readyState === 'complete' && 
+                           document.querySelectorAll('script').length > 0 &&
+                           window.jQuery !== undefined; // 如果使用了jQuery
+        
+        if (allLoaded && isDOMStable) {
+            pageFullyLoaded = true;
+        }
+    }
+
+    // 更新按钮状态
+    function updateButtonStates() {
+        spinButtons.forEach(button => {
+            const btnText = button.querySelector('.btn-text');
+            const btnLoading = button.querySelector('.btn-loading');
+            
+            if (!pageFullyLoaded || isSpinning || !resultsFullyDisplayed) {
+                button.disabled = true;
+                button.style.opacity = '0.6';
+                button.style.pointerEvents = 'none'; // 完全禁用鼠标事件
+                if (!pageFullyLoaded) {
+                    button.title = '页面加载中，请稍候...';
+                    if (btnText && btnLoading) {
+                        btnText.style.display = 'none';
+                        btnLoading.style.display = 'inline';
+                    }
+                } else if (isSpinning) {
+                    button.title = '抽奖进行中...';
+                    if (btnText && btnLoading) {
+                        btnText.style.display = 'none';
+                        btnLoading.style.display = 'inline';
+                    }
+                } else if (!resultsFullyDisplayed) {
+                    button.title = '结果加载中，请稍候...';
+                    if (btnText && btnLoading) {
+                        btnText.style.display = 'none';
+                        btnLoading.style.display = 'inline';
+                    }
+                }
+            } else {
+                button.disabled = false;
+                button.style.opacity = '1';
+                button.style.pointerEvents = 'auto'; // 恢复鼠标事件
+                button.title = '';
+                if (btnText && btnLoading) {
+                    btnText.style.display = 'inline';
+                    btnLoading.style.display = 'none';
+                }
+            }
+        });
+    }
+
+    // 初始检查
+    checkPageFullyLoaded();
+    updateButtonStates();
+    
+    // 如果还没完全加载，继续检查
+    if (!pageFullyLoaded) {
+        const checkInterval = setInterval(() => {
+            checkPageFullyLoaded();
+            updateButtonStates();
+            if (pageFullyLoaded) {
+                clearInterval(checkInterval);
+            }
+        }, 100);
+        
+        // 5秒后强制启用（防止无限等待）
+        setTimeout(() => {
+            if (!pageFullyLoaded) {
+                pageFullyLoaded = true;
+                clearInterval(checkInterval);
+                updateButtonStates();
+            }
+        }, 5000);
+    }
 
     // Hover effect for prize list
     prizeItems.forEach(item => {
@@ -635,24 +739,56 @@ document.addEventListener('DOMContentLoaded', function() {
             nextItem.classList.add('active');
             prizesList.scrollTop = nextItem.offsetTop - prizesList.clientHeight / 2 + nextItem.clientHeight / 2;
             updateFeaturedPrize(nextItem);
-        }, 2500);
+        }, 2000); // 从2.5秒减少到2秒
     }
     function stopAutoRotate() { if (autoRotateTimer) { clearInterval(autoRotateTimer); autoRotateTimer = null; } }
     startAutoRotate();
 
     // Spin logic (先获取结果，再做定向动画，确保动画与中奖一致；连抽仅一次动画)
     spinButtons.forEach(button => {
-        button.addEventListener('click', () => {
-            if (isSpinning) return;
+        button.addEventListener('click', (e) => {
+            e.preventDefault(); // 防止默认行为
+            e.stopPropagation(); // 阻止事件冒泡
+            
+            const currentTime = Date.now();
+            
+            // 防重复点击：2秒内只允许一次点击
+            if (currentTime - lastClickTime < 2000) {
+                return false;
+            }
+            lastClickTime = currentTime;
+            
+            // 检查页面是否完全加载
+            if (!pageFullyLoaded) {
+                return false;
+            }
+            
+            // 检查是否正在抽奖
+            if (isSpinning) {
+                return false;
+            }
+            
+            // 检查结果是否完全显示
+            if (!resultsFullyDisplayed) {
+                return false;
+            }
+            
+            // 检查按钮是否被禁用
+            if (button.disabled) {
+                return false;
+            }
             isSpinning = true;
+            resultsFullyDisplayed = false; // 开始抽奖时标记结果未完全显示
             toggleButtons(false);
             const count = button.dataset.count;
             featuredPrize.classList.add('pulsing');
             performSpin(count);
+            
+            return false;
         });
     });
 
-    // 定向动画：以加速->匀速->减速节奏滚动到目标奖品
+    // 定向动画：滚动到目标奖品，确保动画一定会执行
     function animateToTargetPrize(targetPrizeId, onDone) {
         const items = Array.from(prizeItems);
         const getIndexById = (id) => items.findIndex(i => parseInt(i.dataset.prizeId) === parseInt(id));
@@ -666,67 +802,128 @@ document.addEventListener('DOMContentLoaded', function() {
         let currentIndex = items.findIndex(i => i.classList.contains('active'));
         if (currentIndex < 0) currentIndex = 0;
 
-        // 计算总步数：完整圈数 + 到目标的偏移，确保有仪式感但不拖沓
-        const cycles = Math.max(1, Math.min(2, Math.floor(items.length / 5))); // 更短：1~2圈
-        const totalSteps = cycles * items.length + ((targetIndex - currentIndex + items.length) % items.length);
+        // 增加动画时长和步数，确保动画明显可见
+        const totalDuration = 2500; // 2.5秒，更长的动画时间
+        const totalSteps = Math.max(20, Math.min(30, items.length * 2)); // 更多步数：20-30步
+        const stepDuration = totalDuration / totalSteps;
 
         let step = 0;
-        const baseInterval = 40; // 初始更快
+        let animationId = null; // 用于取消动画
 
         function stepOnce() {
-            // easeOutCubic 减速
-            const t = step / totalSteps;
-            const ease = 1 - Math.pow(1 - t, 3); // 0->1
-            const interval = baseInterval + ease * 180; // 减速幅度更短
+            // 检查动画是否被取消
+            if (animationId === null) {
+                return;
+            }
 
-            // 前进一步
-            currentIndex = (currentIndex + 1) % items.length;
+            // 线性插值到目标位置
+            const progress = step / totalSteps;
+            const easeProgress = 1 - Math.pow(1 - progress, 3); // easeOutCubic，更平滑的减速
+            
+            // 计算当前应该高亮的索引
+            const stepsToTarget = ((targetIndex - currentIndex + items.length) % items.length);
+            const currentStep = Math.floor(easeProgress * stepsToTarget);
+            const newIndex = (currentIndex + currentStep) % items.length;
+
+            // 更新高亮
             items.forEach(i => i.classList.remove('active'));
-            const currentItem = items[currentIndex];
-            currentItem.classList.add('active');
-            prizesList.scrollTop = currentItem.offsetTop - prizesList.clientHeight / 2 + currentItem.clientHeight / 2;
-            updateFeaturedPrize(currentItem);
+            const currentItem = items[newIndex];
+            if (currentItem) {
+                currentItem.classList.add('active');
+                prizesList.scrollTop = currentItem.offsetTop - prizesList.clientHeight / 2 + currentItem.clientHeight / 2;
+                updateFeaturedPrize(currentItem);
+            }
 
             step++;
             if (step <= totalSteps) {
-                setTimeout(stepOnce, interval);
+                animationId = setTimeout(stepOnce, stepDuration);
             } else {
+                // 确保最终停在目标位置
+                items.forEach(i => i.classList.remove('active'));
+                const targetItem = items[targetIndex];
+                if (targetItem) {
+                    targetItem.classList.add('active');
+                    prizesList.scrollTop = targetItem.offsetTop - prizesList.clientHeight / 2 + targetItem.clientHeight / 2;
+                    updateFeaturedPrize(targetItem);
+                }
                 onDone && onDone();
             }
         }
 
+        // 开始动画
+        animationId = 1; // 标记动画开始
         stepOnce();
+        
+        // 返回取消函数
+        return () => {
+            if (animationId) {
+                clearTimeout(animationId);
+                animationId = null;
+            }
+        };
     }
 
     function performSpin(count) {
+        // 确保页面完全加载
+        if (!pageFullyLoaded) {
+            resetSpinningState();
+            return;
+        }
+        
         const formData = new FormData();
         formData.append('count', count);
         
-        fetch('fortune-wheel-spin.php', { method: 'POST', body: formData })
-            .then(response => response.json())
+        fetch('fortune-wheel-spin.php', { 
+            method: 'POST', 
+            body: formData,
+            cache: 'no-cache',
+            credentials: 'same-origin'
+        })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                return response.json();
+            })
             .then(data => {
                 if (data.success) {
                     lastResults = Array.isArray(data.results) ? data.results : [];
                     lastWinning = pickPrimaryResult(lastResults);
                     const targetId = lastWinning?.prize?.id || chooseTargetPrizeId(lastResults);
-                    animateToTargetPrize(targetId, () => {
+                    
+                    // 取消之前的动画（如果有）
+                    if (currentAnimation) {
+                        currentAnimation();
+                        currentAnimation = null;
+                    }
+                    
+                    // 开始新的动画
+                    currentAnimation = animateToTargetPrize(targetId, () => {
                         featuredPrize.classList.remove('pulsing');
                         syncFeaturedWithWinning(lastWinning);
                         syncLeftListHighlightByName(lastWinning?.prize?.name);
                         showResults(lastResults);
+                        currentAnimation = null; // 清除动画引用
+                        
+                        // 抽奖动画完成后，延迟标记结果已完全显示
+                        setTimeout(() => {
+                            resultsFullyDisplayed = true;
+                            updateButtonStates(); // 更新按钮状态
+                        }, 2000); // 减少到2秒，因为动画已经2.5秒了
                     });
                 } else {
                     alert('抽奖失败: ' + data.message);
                     featuredPrize.classList.remove('pulsing');
+                    resultsFullyDisplayed = true; // 失败时也标记结果已显示
                     resetSpinningState();
-            }
-        })
-        .catch(error => {
-            console.error('Error:', error);
-                alert('发生未知错误，请稍后重试。');
+                }
+            })
+            .catch(error => {
+                alert('网络错误，请检查网络连接后重试。');
                 featuredPrize.classList.remove('pulsing');
+                resultsFullyDisplayed = true; // 错误时也标记结果已显示
                 resetSpinningState();
-        });
+            });
     }
 
     // 选择用于展示动画落点的目标奖品ID：
@@ -818,17 +1015,72 @@ document.addEventListener('DOMContentLoaded', function() {
 
     function resetSpinningState() {
         isSpinning = false;
+        resultsFullyDisplayed = true; // 重置结果显示状态
+        lastClickTime = 0; // 重置点击时间
+        
+        // 取消当前动画
+        if (currentAnimation) {
+            currentAnimation();
+            currentAnimation = null;
+        }
+        
         toggleButtons(true);
+        // 确保按钮状态正确更新
+        updateButtonStates();
     }
     
     function toggleButtons(enabled) {
-        spinButtons.forEach(button => button.disabled = !enabled);
+        spinButtons.forEach(button => {
+            button.disabled = !enabled;
+            // 同步更新按钮状态显示
+            updateButtonStates();
+        });
+    }
+
+    // 获取最新的用户状态
+    function updateUserStats() {
+        fetch('fortune-wheel.php', {
+            method: 'GET',
+            cache: 'no-cache'
+        })
+        .then(response => response.text())
+        .then(html => {
+            // 解析HTML获取最新的用户状态
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(html, 'text/html');
+            
+            // 更新抽奖次数显示
+            const newStatsElement = doc.querySelector('.stats-item[data-type="today_count"] .value');
+            if (newStatsElement) {
+                const currentStatsElement = document.querySelector('.stats-item[data-type="today_count"] .value');
+                if (currentStatsElement) {
+                    currentStatsElement.textContent = newStatsElement.textContent;
+                }
+            }
+            
+            // 更新余额显示
+            const newBalanceElement = doc.querySelector('.stats-item[data-type="balance"] .value');
+            if (newBalanceElement) {
+                const currentBalanceElement = document.querySelector('.stats-item[data-type="balance"] .value');
+                if (currentBalanceElement) {
+                    currentBalanceElement.textContent = newBalanceElement.textContent;
+                }
+            }
+            
+        })
+        .catch(error => {
+            // 静默处理错误
+        });
     }
 
     function closeModal() {
         resultModal.classList.remove('visible');
-        resetSpinningState();
-        setTimeout(() => location.reload(), 200);
+        // 延迟重置状态，确保动画完成
+        setTimeout(() => {
+            resetSpinningState();
+            // 更新用户状态而不刷新页面
+            updateUserStats();
+        }, 500);
     }
 
     modalClose.addEventListener('click', closeModal);

@@ -81,9 +81,9 @@ class SettingsManager
                     \Filament\Forms\Components\TextInput::make('fortune_wheel.daily_max_spins')
                         ->label('每日最大次数')
                         ->numeric()
-                        ->default(10)
+                        ->default(10000)
                         ->minValue(0)
-                        ->maxValue(1000)
+                        ->maxValue(10000)
                         ->helperText('用户每天最多可以抽奖的次数（包括付费）'),
 
                     \Filament\Forms\Components\TextInput::make('fortune_wheel.bonus_cost_per_spin')

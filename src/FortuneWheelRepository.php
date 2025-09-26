@@ -636,7 +636,7 @@ EOD;
         $defaults = [
             'enabled' => true,
             'daily_free_spins' => 3,
-            'daily_max_spins' => 10,
+            'daily_max_spins' => 10000,
             'bonus_cost_per_spin' => 1000,
             'spin_interval' => 10,
             'show_recent_wins' => true,
@@ -770,8 +770,21 @@ EOD;
         }
         }
         else if ($user->class == \App\Models\User::CLASS_VIP) {
-            if ($settings['vip_stack_time'] ?? true) {
-                $newExpireDate = ($user->vip_until && $user->vip_until > '0000-00-00 00:00:00' && $user->vip_until->isFuture())
+            // 检查是否为永久VIP（vip_until为空、null或'0000-00-00 00:00:00'表示永久）
+            $isPermanentVip = !$user->vip_until || $user->vip_until == '0000-00-00 00:00:00' || $user->vip_until == null || $user->vip_until == '';
+            
+            if ($isPermanentVip) {
+                // 永久VIP按重复奖励处理
+                $bonus = (int)($settings['vip_duplicate_bonus'] ?? 0);
+                if ($bonus > 0) {
+                    $this->awardBonus($userId, $bonus);
+                    return ['status' => 'compensated', 'type' => 'vip', 'value' => $bonus, 'unit' => $this->getBonusName()];
+                } else {
+                    return ['status' => 'already_owned', 'type' => 'vip'];
+                }
+            } else if ($settings['vip_stack_time'] ?? true) {
+                // 时限VIP可以叠加时间
+                $newExpireDate = $user->vip_until->isFuture() 
                     ? $user->vip_until->addDays($days)
                     : now()->addDays($days);
                 
@@ -784,7 +797,7 @@ EOD;
                     return ['status' => 'compensated', 'type' => 'vip', 'value' => $bonus, 'unit' => $this->getBonusName()];
                 } else {
                     return ['status' => 'already_owned', 'type' => 'vip'];
-        }
+                }
             }
         } 
         else {
@@ -856,8 +869,23 @@ EOD;
             $meta = $user->metas()->where('meta_key', \App\Models\UserMeta::META_KEY_PERSONALIZED_USERNAME)->first();
 
             if ($meta) {
-                if ($settings['rainbow_id_stack_time'] ?? true) {
-                    $newDeadline = $meta->deadline ? $meta->deadline->addDays($days) : now()->addDays($days);
+                // 检查是否为永久彩虹ID（deadline为空、null或'0000-00-00 00:00:00'表示永久）
+                $isPermanentRainbowId = !$meta->deadline || $meta->deadline == '0000-00-00 00:00:00' || $meta->deadline == null || $meta->deadline == '';
+                
+                if ($isPermanentRainbowId) {
+                    // 永久彩虹ID按重复奖励处理
+                    $bonus = (int)($settings['rainbow_id_duplicate_bonus'] ?? 0);
+                    if ($bonus > 0) {
+                        $this->awardBonus($userId, $bonus);
+                        return ['status' => 'compensated', 'type' => 'rainbow_id', 'value' => $bonus, 'unit' => $this->getBonusName()];
+                    } else {
+                        return ['status' => 'already_owned', 'type' => 'rainbow_id'];
+                    }
+                } else if ($settings['rainbow_id_stack_time'] ?? true) {
+                    // 时限彩虹ID可以叠加时间
+                    $newDeadline = $meta->deadline->isFuture() 
+                        ? $meta->deadline->addDays($days)
+                        : now()->addDays($days);
                     $meta->update(['deadline' => $newDeadline]);
                     return ['status' => 'extended', 'type' => 'rainbow_id', 'value' => $days, 'unit' => '天'];
                 } else {
@@ -1197,15 +1225,21 @@ EOD;
 
         $grades = $this->getPrizeGrades($prizes);
         $results = [];
-        for ($i = 0; $i < $count; $i++) {
-            $isFree = ($userStats['today_count'] + $i) < (int)$settings['daily_free_spins'];
-            $spinCost = $isFree ? 0 : (int)$settings['bonus_cost_per_spin'];
-            
-            $result = $this->_spinOnce($userId, $prizes, $settings, $spinCost, $grades);
-            if ($result) {
-                $results[] = $result;
-            } else {
-                // 如果单次抽奖失败，可能需要记录日志或处理
+        
+        // 批量处理：减少数据库操作次数
+        if ($count >= 10) {
+            // 大批量抽奖：批量处理数据库操作
+            $results = $this->_batchSpin($userId, $prizes, $settings, $grades, $count, $userStats);
+        } else {
+            // 小批量抽奖：保持原有逻辑
+            for ($i = 0; $i < $count; $i++) {
+                $isFree = ($userStats['today_count'] + $i) < (int)$settings['daily_free_spins'];
+                $spinCost = $isFree ? 0 : (int)$settings['bonus_cost_per_spin'];
+                
+                $result = $this->_spinOnce($userId, $prizes, $settings, $spinCost, $grades);
+                if ($result) {
+                    $results[] = $result;
+                }
             }
         }
         
@@ -1213,6 +1247,145 @@ EOD;
             'success' => true,
             'results' => $results,
         ];
+    }
+    
+    /**
+     * 批量抽奖：优化大批量抽奖的数据库操作
+     */
+    private function _batchSpin(int $userId, array $prizes, array $settings, array $grades, int $count, array $userStats): array
+    {
+        $results = [];
+        $records = []; // 批量记录
+        $totalWinCount = 0;
+        $totalCost = 0;
+        
+        // 预计算所有抽奖结果
+        for ($i = 0; $i < $count; $i++) {
+            $isFree = ($userStats['today_count'] + $i) < (int)$settings['daily_free_spins'];
+            $spinCost = $isFree ? 0 : (int)$settings['bonus_cost_per_spin'];
+            
+            $prize = $this->drawPrize($prizes);
+            if (!$prize) {
+                continue;
+            }
+            
+            // 简化的库存检查（不锁定）
+            if ($prize['stock'] != -1 && $prize['stock'] <= 0) {
+                $prize = [
+                    'id' => 0,
+                    'name' => '谢谢参与',
+                    'type' => 'nothing',
+                    'sort_order' => 0,
+                ];
+            }
+            
+            $prizeResult = $this->awardPrize($userId, $prize, $settings);
+            $isWin = $prize['type'] !== 'nothing';
+            
+            if ($isWin) {
+                $totalWinCount++;
+            }
+            $totalCost += $spinCost;
+            
+            $results[] = [
+                'prize' => [
+                    'id' => $prize['id'],
+                    'name' => $prize['name'],
+                ],
+                'result' => $prizeResult,
+                'grade' => $grades[$prize['id']] ?? '参与奖'
+            ];
+            
+            // 准备批量记录数据
+            $records[] = [
+                'user_id' => $userId,
+                'prize_id' => $prize['id'],
+                'prize_name' => addslashes($prize['name']),
+                'is_win' => $isWin ? 1 : 0,
+                'cost_bonus' => $spinCost,
+                'prize_data' => addslashes(json_encode($prize)),
+                'result_status' => $prizeResult['status'] ?? ($isWin ? 'awarded' : 'nothing'),
+                'result_value' => $prizeResult['value'] ?? '',
+                'result_unit' => $prizeResult['unit'] ?? '',
+                'ip' => $_SERVER['REMOTE_ADDR'] ?? '',
+            ];
+        }
+        
+        // 批量插入记录
+        if (!empty($records)) {
+            $this->_batchInsertRecords($records);
+        }
+        
+        // 批量更新用户统计
+        $this->_batchUpdateUserStats($userId, $totalWinCount, $count, $totalCost);
+        
+        // 批量更新库存
+        $this->_batchUpdateStock($records);
+        
+        return $results;
+    }
+    
+    /**
+     * 批量插入抽奖记录
+     */
+    private function _batchInsertRecords(array $records): void
+    {
+        if (empty($records)) {
+            return;
+        }
+        
+        $values = [];
+        foreach ($records as $record) {
+            $values[] = sprintf("(%d, %d, '%s', %d, %d, '%s', '%s', '%s', '%s', '%s', NOW(), NOW())",
+                $record['user_id'],
+                $record['prize_id'],
+                $record['prize_name'],
+                $record['is_win'],
+                $record['cost_bonus'],
+                $record['prize_data'],
+                $record['result_status'],
+                $record['result_value'],
+                $record['result_unit'],
+                $record['ip']
+            );
+        }
+        
+        $sql = "INSERT INTO fortune_wheel_records (user_id, prize_id, prize_name, is_win, cost_bonus, prize_data, result_status, result_value, result_unit, ip, created_at, updated_at) VALUES " . implode(', ', $values);
+        \Nexus\Database\NexusDB::statement($sql);
+    }
+    
+    /**
+     * 批量更新用户统计
+     */
+    private function _batchUpdateUserStats(int $userId, int $winCount, int $drawCount, int $totalCost): void
+    {
+        $sql = "INSERT INTO fortune_wheel_user_stats (user_id, date, draw_count, win_count, total_cost, created_at, updated_at)
+                VALUES ($userId, CURDATE(), $drawCount, $winCount, $totalCost, NOW(), NOW())
+                ON DUPLICATE KEY UPDATE
+                draw_count = draw_count + $drawCount,
+                win_count = win_count + $winCount,
+                total_cost = total_cost + $totalCost,
+                updated_at = NOW()";
+        
+        \Nexus\Database\NexusDB::statement($sql);
+    }
+    
+    /**
+     * 批量更新库存
+     */
+    private function _batchUpdateStock(array $records): void
+    {
+        $stockUpdates = [];
+        foreach ($records as $record) {
+            if ($record['prize_id'] > 0) {
+                $stockUpdates[$record['prize_id']] = ($stockUpdates[$record['prize_id']] ?? 0) + 1;
+            }
+        }
+        
+        foreach ($stockUpdates as $prizeId => $decreaseCount) {
+            $sql = "UPDATE fortune_wheel_prizes SET stock = stock - $decreaseCount WHERE id = $prizeId AND stock >= $decreaseCount";
+            \Nexus\Database\NexusDB::statement($sql);
+        }
     }
     
     /**
