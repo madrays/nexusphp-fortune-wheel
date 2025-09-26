@@ -1077,6 +1077,22 @@ document.addEventListener('DOMContentLoaded', function() {
         resultModal.classList.remove('visible');
         // 延迟重置状态，确保动画完成
         setTimeout(() => {
+            // 恢复到预设态：右侧卡片显示“选择奖品/查看详情”，左侧高亮清除
+            try {
+                const items = Array.from(prizeItems);
+                items.forEach(i => i.classList.remove('active'));
+                // 恢复右侧预设文案
+                featuredPrize.innerHTML = `
+                    <div class="neo-card">
+                        <div class="neo-halo"></div>
+                        <div class="neo-glow"></div>
+                        <div class="neo-emoji">✨</div>
+                        <div class="neo-title fw-prize-title fw-grad-others">选择奖品</div>
+                        <div class="neo-desc">查看详情</div>
+                    </div>
+                `;
+            } catch (e) { /* 忽略恢复过程中的非致命错误 */ }
+
             resetSpinningState();
             // 更新用户状态而不刷新页面
             updateUserStats();
